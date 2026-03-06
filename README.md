@@ -2,6 +2,9 @@
 
 Este projeto representa a evolução da experiência de compra para a **Casa do 20**. Substituímos o catálogo estático e limitado por uma vitrine digital moderna, ultra-rápida (App-Like) e otimizada para conversão via WhatsApp.
 
+**Production URL**: [https://ecommercec20.vercel.app/](https://ecommercec20.vercel.app/)
+**Admin Dashboard**: [https://ecommercec20.vercel.app/admin/upload](https://ecommercec20.vercel.app/admin/upload)
+
 ---
 
 ## 🎯 Visão do Produto e Diferenciais
