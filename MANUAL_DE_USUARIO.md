@@ -13,6 +13,7 @@ Ao abrir o site, você encontrará a vitrine de produtos organizada de forma int
 - **Cards de Produtos**: No centro da tela, você verá os produtos em destaque. Cada "card" mostra a foto do produto, o nome e o preço.
 - **Menu de Categorias (Lateral Esquerda)**: No lado esquerdo, você tem uma lista de categorias (Ex: Brinquedos, Cozinha, Limpeza). Clique em qualquer uma delas para filtrar os produtos daquela seção.
 - **Barra de Pesquisa (Topo)**: No topo da tela, há uma barra de pesquisa. Digite o nome de um produto ou código (EAN) para encontrá-lo instantaneamente.
+- **Paginação**: Ao final da lista de produtos, você encontrará botões para navegar entre as páginas. Você pode avançar, voltar, ou ir direto para a primeira/última página. Isso garante que o site carregue rápido e você consiga acessar o rodapé facilmente.
 
 ---
 

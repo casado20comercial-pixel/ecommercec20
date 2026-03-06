@@ -15,6 +15,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       products: result.products,
       hasMore: result.hasMore,
+      totalCount: result.totalCount,
       categories,
       source: 'hiper'
     })

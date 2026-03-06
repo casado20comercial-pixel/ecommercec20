@@ -18,7 +18,7 @@ export interface ProductData {
  * Service to handle product data fetching from the Supabase Mirror table.
  */
 export const ProductService = {
-    async getAll(page: number = 1, limit: number = 24, category?: string | null, search?: string | null): Promise<{ products: ProductData[], hasMore: boolean }> {
+    async getAll(page: number = 1, limit: number = 24, category?: string | null, search?: string | null): Promise<{ products: ProductData[], hasMore: boolean, totalCount: number }> {
         if (!supabaseAdmin) throw new Error('Supabase Admin not initialized');
 
         const from = (page - 1) * limit;
@@ -49,7 +49,7 @@ export const ProductService = {
 
         if (error) {
             console.error('[ProductService] Error fetching products:', error);
-            return { products: [], hasMore: false };
+            return { products: [], hasMore: false, totalCount: 0 };
         }
 
         // Fetch images separately for each product to avoid join issues if needed, 
@@ -69,7 +69,7 @@ export const ProductService = {
         const total = count || 0;
         const hasMore = from + mapped.length < total;
 
-        return { products: mapped, hasMore };
+        return { products: mapped, hasMore, totalCount: total };
     },
 
     async getById(id: string): Promise<ProductData | null> {

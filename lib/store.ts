@@ -93,13 +93,14 @@ interface ProductStore {
   products: Product[]
   categories: Category[]
   isLoading: boolean
-  isLoadingMore: boolean
   hasMore: boolean
+  totalCount: number
   page: number
+  limit: number
   currentCategory: string | null
   currentSearch: string | null
   lastUpdated: number | null
-  fetchProducts: (refresh?: boolean, category?: string | null, search?: string | null) => Promise<void>
+  fetchProducts: (refresh?: boolean, category?: string | null, search?: string | null, targetPage?: number) => Promise<void>
 }
 
 export const useProductStore = create<ProductStore>()(
@@ -108,56 +109,57 @@ export const useProductStore = create<ProductStore>()(
       products: [],
       categories: [],
       isLoading: false,
-      isLoadingMore: false,
       hasMore: true,
+      totalCount: 0,
       page: 1,
+      limit: 24,
       currentCategory: null,
       currentSearch: null,
       lastUpdated: null,
-      fetchProducts: async (refresh = false, category, search) => {
-        const { page, products, hasMore, isLoading, isLoadingMore, currentCategory, currentSearch } = get()
+      fetchProducts: async (refresh = false, category, search, targetPage) => {
+        const { products, isLoading, currentCategory, currentSearch, limit, page } = get()
 
         // Sync with existing or new filters
         const targetCategory = category !== undefined ? category : currentCategory
         const targetSearch = search !== undefined ? search : currentSearch
 
-        const isCategoryChange = targetCategory !== currentCategory
-        const isSearchChange = targetSearch !== currentSearch
+        // If it's a target page request, use it, otherwise check if filters changed to reset to 1
+        const isFilterChange = targetCategory !== currentCategory || targetSearch !== currentSearch
+        const effectivePage = targetPage !== undefined ? targetPage : (isFilterChange || refresh ? 1 : page)
 
-        if (isLoading || isLoadingMore) return
-        if (!refresh && !isCategoryChange && !isSearchChange && !hasMore) return
-
-        const isInitialFetch = refresh || isCategoryChange || isSearchChange || products.length === 0
-        const currentPage = isInitialFetch ? 1 : page + 1
+        if (isLoading) return
 
         set({
-          isLoading: isInitialFetch,
-          isLoadingMore: !isInitialFetch,
-          // Reset if any filter changed
-          ...(isInitialFetch && { products: [], page: 1, hasMore: true }),
+          isLoading: true,
           currentCategory: targetCategory,
-          currentSearch: targetSearch
+          currentSearch: targetSearch,
+          page: effectivePage
         })
 
         try {
           const categoryQuery = targetCategory ? `&category=${targetCategory}` : ''
           const searchQuery = targetSearch ? `&q=${encodeURIComponent(targetSearch)}` : ''
-          const response = await fetch(`/api/products?page=${currentPage}&limit=24${categoryQuery}${searchQuery}`)
+          const response = await fetch(`/api/products?page=${effectivePage}&limit=${limit}${categoryQuery}${searchQuery}`)
           if (!response.ok) throw new Error('Falha ao buscar produtos')
           const data = await response.json()
 
           set({
-            products: isInitialFetch ? data.products : [...products, ...data.products],
+            products: data.products,
             categories: data.categories || [],
             hasMore: data.hasMore,
-            page: currentPage,
+            totalCount: data.totalCount || 0,
+            page: effectivePage,
             lastUpdated: Date.now(),
-            isLoading: false,
-            isLoadingMore: false
+            isLoading: false
           })
+
+          // Scroll to top on page change
+          if (typeof window !== 'undefined') {
+            window.scrollTo({ top: 0, behavior: refresh || isFilterChange ? 'auto' : 'smooth' })
+          }
         } catch (error) {
           console.error('[ProductStore] Erro ao sincronizar:', error)
-          set({ isLoading: false, isLoadingMore: false })
+          set({ isLoading: false })
         }
       },
     }),
