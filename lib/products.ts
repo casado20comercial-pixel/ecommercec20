@@ -117,32 +117,33 @@ export const products: Product[] = [
 ]
 
 export function getProductById(id: string) {
-  return products.find((product) => product.id === id)
+  return products.find((product) => product.id === id && (product.stock ?? 0) >= 5)
 }
 
 export function getProductsByCategory(categoryId: string) {
-  return products.filter((product) => product.category === categoryId)
+  return products.filter((product) => product.category === categoryId && (product.stock ?? 0) >= 5)
 }
 
 export function searchProducts(query: string) {
   const lowerQuery = query.toLowerCase()
   return products.filter(
     (product) =>
-      product.name.toLowerCase().includes(lowerQuery) ||
-      product.category.toLowerCase().includes(lowerQuery)
+      ((product.stock ?? 0) >= 5) &&
+      (product.name.toLowerCase().includes(lowerQuery) ||
+        product.category.toLowerCase().includes(lowerQuery))
   )
 }
 
 export function getBestSellers() {
-  return products.filter((product) => product.badge === 'best-seller')
+  return products.filter((product) => product.badge === 'best-seller' && (product.stock ?? 0) >= 5)
 }
 
 export function getNewProducts() {
-  return products.filter((product) => product.badge === 'new')
+  return products.filter((product) => product.badge === 'new' && (product.stock ?? 0) >= 5)
 }
 
 export function getSaleProducts() {
-  return products.filter((product) => product.badge === 'sale' || product.originalPrice)
+  return products.filter((product) => (product.badge === 'sale' || product.originalPrice) && (product.stock ?? 0) >= 5)
 }
 
 export function getRelatedProducts(currentProductId: string, limit = 4) {
@@ -154,7 +155,8 @@ export function getRelatedProducts(currentProductId: string, limit = 4) {
   const related = products.filter(
     (product) =>
       product.category === currentProduct.category &&
-      product.id !== currentProductId
+      product.id !== currentProductId &&
+      (product.stock ?? 0) >= 5
   )
 
   // If we don't have enough related products, fill with other random products
@@ -162,7 +164,8 @@ export function getRelatedProducts(currentProductId: string, limit = 4) {
     const others = products.filter(
       (product) =>
         product.category !== currentProduct.category &&
-        product.id !== currentProductId
+        product.id !== currentProductId &&
+        (product.stock ?? 0) >= 5
     )
     return [...related, ...others].slice(0, limit)
   }

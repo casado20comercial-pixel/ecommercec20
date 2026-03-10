@@ -27,7 +27,7 @@ export const ProductService = {
         let query = supabaseAdmin
             .from('products')
             .select('*', { count: 'exact' }) // Removed the product_images join
-            .gt('stock', 0);
+            .gte('stock', 5);
 
         if (category) {
             if (category === 'price-under-25') {
