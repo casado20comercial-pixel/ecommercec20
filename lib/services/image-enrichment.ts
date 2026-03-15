@@ -2,9 +2,10 @@ import { supabaseAdmin } from '@/lib/supabaseClient';
 import sharp from 'sharp';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 function logDebug(msg: string) {
-    const p = path.join(process.cwd(), 'debug-enrichment.log');
+    const p = path.join(os.tmpdir(), 'debug-enrichment.log');
     try {
         fs.appendFileSync(p, new Date().toISOString() + ': ' + msg + '\n');
     } catch (e) {
@@ -24,8 +25,9 @@ export class ImageEnrichmentService {
         logDebug(`[Enrichment] Processing and uploading image from ${source}...`);
 
         const processedBuffer = await sharp(buffer)
-            .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
-            .webp({ quality: 80 })
+            .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
+            .sharpen({ sigma: 0.5 })
+            .webp({ quality: 90 })
             .toBuffer();
 
         const imageKey = product.ean || product.sku;

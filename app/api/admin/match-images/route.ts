@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ImageMatchService } from '@/lib/services/image-match-service';
 
+export const maxDuration = 300; // 5 minutos para reconciliar imagens
+
 export async function POST(req: NextRequest) {
     try {
         const matchService = new ImageMatchService();

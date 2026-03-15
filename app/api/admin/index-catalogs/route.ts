@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { CatalogIndexingService } from '@/lib/services/catalog-indexer';
 
+export const maxDuration = 300; // 5 minutos para indexar catálogos
+
 const indexer = new CatalogIndexingService();
 
 export async function POST(req: NextRequest) {

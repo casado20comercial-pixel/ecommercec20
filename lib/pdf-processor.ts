@@ -16,72 +16,28 @@ interface ExtractedImage {
 }
 
 /**
- * Gets the total number of pages in the PDF buffer using pdfinfo.
+ * Gets the total number of pages in the PDF buffer using MuPDF (WASM).
  */
 async function getNumPages(pdfBuffer: Buffer): Promise<number> {
-    return new Promise((resolve, reject) => {
-        const process = spawn('pdfinfo', ['-']);
-        let stdout = '';
-        let stderr = '';
-
-        process.stdin.write(pdfBuffer);
-        process.stdin.end();
-
-        process.stdout.on('data', (data) => {
-            stdout += data.toString();
-        });
-
-        process.stderr.on('data', (data) => {
-            stderr += data.toString();
-        });
-
-        process.on('close', (code) => {
-            if (code !== 0) {
-                if (stdout.includes('Pages:')) {
-                    // Sometimes warnings make exit code non-zero but output is valid
-                } else {
-                    return reject(new Error(`pdfinfo exited with code ${code}: ${stderr}`));
-                }
-            }
-            const match = stdout.match(/Pages:\s+(\d+)/);
-            if (match && match[1]) {
-                resolve(parseInt(match[1], 10));
-            } else {
-                reject(new Error('Could not parse page count from pdfinfo output'));
-            }
-        });
-    });
+    const mupdf = await import('mupdf');
+    const doc = mupdf.Document.openDocument(pdfBuffer, 'application/pdf');
+    return doc.countPages();
 }
 
 /**
- * Renders a specific page of the PDF buffer to a PNG buffer using pdftoppm.
+ * Renders a specific page of the PDF buffer to a PNG buffer using MuPDF at 300 DPI.
  */
 async function renderPageToBuffer(pdfBuffer: Buffer, pageNumber: number): Promise<Buffer> {
-    return new Promise((resolve, reject) => {
-        const args = ['-f', pageNumber.toString(), '-l', pageNumber.toString(), '-png', '-r', '150', '-singlefile', '-'];
-        const process = spawn('pdftoppm', args);
-
-        const chunks: Buffer[] = [];
-        let stderr = '';
-
-        process.stdin.write(pdfBuffer);
-        process.stdin.end();
-
-        process.stdout.on('data', (data) => {
-            chunks.push(Buffer.from(data));
-        });
-
-        process.stderr.on('data', (data) => {
-            stderr += data.toString();
-        });
-
-        process.on('close', (code) => {
-            if (code !== 0) {
-                return reject(new Error(`pdftoppm (page ${pageNumber}) exited with code ${code}: ${stderr}`));
-            }
-            resolve(Buffer.concat(chunks));
-        });
-    });
+    const mupdf = await import('mupdf');
+    const doc = mupdf.Document.openDocument(pdfBuffer, 'application/pdf');
+    const page = doc.loadPage(pageNumber - 1); // 0-indexed
+    const scale = 300 / 72; // 300 DPI
+    const pixmap = page.toPixmap(
+        mupdf.Matrix.scale(scale, scale),
+        mupdf.ColorSpace.DeviceRGB,
+        false
+    );
+    return Buffer.from(pixmap.asPNG());
 }
 
 interface DetectedBarcode {
@@ -314,7 +270,9 @@ export async function processPdfBuffer(pdfBuffer: Buffer, validIds?: Set<string>
                                     width: Math.min(width - left, cropWidth),
                                     height: Math.min(height - top, cropHeight)
                                 })
-                                .webp({ quality: 80 })
+                                .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
+                                .sharpen({ sigma: 0.5 })
+                                .webp({ quality: 90 })
                                 .toBuffer();
 
                             results.push({ ean, buffer: extractedImageBuffer, page: i });

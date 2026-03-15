@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { PdfExtractionService } from '@/lib/services/pdf-extraction-service';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { v4 as uuidv4 } from 'uuid';
+
+export const maxDuration = 300; // 5 minutos para processar PDFs grandes
 
 export async function POST(req: NextRequest) {
     try {
@@ -28,7 +31,7 @@ export async function POST(req: NextRequest) {
                 // 1. Salvar arquivo temporário
                 const bytes = await file.arrayBuffer();
                 const buffer = Buffer.from(bytes);
-                const tempDir = path.join(process.cwd(), 'temp', 'uploads');
+                const tempDir = path.join(os.tmpdir(), 'pdf_uploads');
                 if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
                 tempPdfPath = path.join(tempDir, `${uuidv4()}.pdf`);

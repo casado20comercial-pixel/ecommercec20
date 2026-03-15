@@ -1,13 +1,10 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { supabaseAdmin } from '../supabaseClient';
 import sharp from 'sharp';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import crypto from 'crypto';
-
-const execPromise = promisify(exec);
 
 interface ExtractedProduct {
     product_name: string;
@@ -69,62 +66,38 @@ export class PdfExtractionService {
     }
 
     /**
-     * Detecta o total de páginas de um PDF usando pdfinfo
-     */
-    async getNumPages(pdfPath: string): Promise<number> {
-        return new Promise((resolve) => {
-            const { spawn } = require('child_process');
-            const proc = spawn('pdfinfo', [pdfPath]);
-            let stdout = '';
-            proc.stdout.on('data', (data: any) => { stdout += data.toString(); });
-            proc.on('close', () => {
-                const match = stdout.match(/Pages:\s+(\d+)/);
-                resolve(match ? parseInt(match[1], 10) : 1);
-            });
-        });
-    }
-
-    /**
-     * Converte as páginas de um PDF em imagens PNG com 300 DPI
+     * Converte as páginas de um PDF em imagens PNG com 300 DPI usando MuPDF (WASM)
      */
     async convertPdfToImages(pdfPath: string, maxPages: number = 999): Promise<string[]> {
-        const outputDir = path.join(process.cwd(), 'temp', 'pdf_processing', path.basename(pdfPath, '.pdf'));
+        const outputDir = path.join(os.tmpdir(), 'pdf_processing', path.basename(pdfPath, '.pdf'));
         if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
 
-        const totalPages = await this.getNumPages(pdfPath);
+        const mupdf = await import('mupdf');
+        const pdfData = fs.readFileSync(pdfPath);
+        const doc = mupdf.Document.openDocument(pdfData, 'application/pdf');
+        const totalPages = doc.countPages();
         const pagesToConvert = Math.min(totalPages, maxPages);
 
-        console.log(`[PDF] Detectadas ${totalPages} páginas. Convertendo ${pagesToConvert} em 300 DPI...`);
+        console.log(`[PDF] Detectadas ${totalPages} páginas. Convertendo ${pagesToConvert} em 300 DPI via MuPDF...`);
 
-        return new Promise((resolve, reject) => {
-            const { spawn } = require('child_process');
-            // pdftoppm -f 1 -l pagesToConvert -png -r 300 pdfPath outputDir/page
-            const proc = spawn('pdftoppm', [
-                '-f', '1',
-                '-l', pagesToConvert.toString(),
-                '-png',
-                '-r', '300', // Força 300 DPI para precisão cirúrgica
-                pdfPath,
-                path.join(outputDir, 'page')
-            ]);
+        const scale = 300 / 72; // 300 DPI (PDF padrão é 72 DPI)
+        const files: string[] = [];
 
-            proc.on('close', (code: number) => {
-                if (code !== 0) {
-                    return reject(new Error(`pdftoppm falhou com código ${code}`));
-                }
+        for (let i = 0; i < pagesToConvert; i++) {
+            const page = doc.loadPage(i);
+            const pixmap = page.toPixmap(
+                mupdf.Matrix.scale(scale, scale),
+                mupdf.ColorSpace.DeviceRGB,
+                false
+            );
+            const pngData = pixmap.asPNG();
+            const outputPath = path.join(outputDir, `page-${String(i + 1).padStart(3, '0')}.png`);
+            fs.writeFileSync(outputPath, pngData);
+            files.push(outputPath);
+            console.log(`[PDF] Página ${i + 1}/${pagesToConvert} convertida.`);
+        }
 
-                const files = fs.readdirSync(outputDir)
-                    .filter(f => f.startsWith('page-') && f.endsWith('.png'))
-                    .sort((a, b) => {
-                        const numA = parseInt(a.match(/\d+/)?.[0] || '0', 10);
-                        const numB = parseInt(b.match(/\d+/)?.[0] || '0', 10);
-                        return numA - numB;
-                    })
-                    .map(f => path.join(outputDir, f));
-
-                resolve(files);
-            });
-        });
+        return files;
     }
 
     /**
@@ -245,8 +218,8 @@ Exemplo: [{"product_name": "Nome", "ref_id": "QH-3921", "ncm": "8302.20.00", "pr
         // --- Redução (Shrink) de Segurança (1.5%) ---
         // Ao invés de *adicionarmos* padding para fora e corrermos o risco de pegar textos (ruídos),
         // Vamos aplicar um encolhimento, garantindo um "crop interno" que foca no núcleo da imagem.
-        const shrinkY = Math.round(height * 0.015);
-        const shrinkX = Math.round(width * 0.015);
+        const shrinkY = Math.round(height * 0.005);
+        const shrinkX = Math.round(width * 0.005);
 
         top = Math.min(metadata.height, top + shrinkY);
         left = Math.min(metadata.width, left + shrinkX);
@@ -256,8 +229,9 @@ Exemplo: [{"product_name": "Nome", "ref_id": "QH-3921", "ncm": "8302.20.00", "pr
         try {
             const buffer = await image
                 .extract({ left, top, width, height })
-                .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
-                .webp({ quality: 85 })
+                .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
+                .sharpen({ sigma: 0.5 })
+                .webp({ quality: 90 })
                 .toBuffer();
 
             // Calcular pHash para deduplicação

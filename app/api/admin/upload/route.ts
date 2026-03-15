@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { processPdfBuffer } from '@/lib/pdf-processor';
 import { supabaseAdmin } from '@/lib/supabaseClient';
 
+export const maxDuration = 300; // 5 minutos para processar PDFs grandes
+
 export async function POST(req: NextRequest) {
     try {
         if (!supabaseAdmin) {

@@ -21,8 +21,9 @@ export async function POST(req: NextRequest) {
         const buffer = Buffer.from(bytes);
 
         const processedBuffer = await sharp(buffer)
-            .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
-            .webp({ quality: 80 })
+            .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
+            .sharpen({ sigma: 0.5 })
+            .webp({ quality: 90 })
             .toBuffer();
 
         if (!supabaseAdmin) throw new Error('Supabase Admin not initialized');
