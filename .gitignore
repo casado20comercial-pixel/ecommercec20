@@ -30,3 +30,6 @@ next-env.d.ts
 *.log
 /temp/
 brave_*.json
+CLAUDE.md
+.claude/settings.local.json
+.claude

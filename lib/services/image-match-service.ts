@@ -10,6 +10,24 @@ export interface MatchResult {
 }
 
 export class ImageMatchService {
+    // Mapa de abreviações comuns em nomes de produtos
+    private static readonly ABBREVIATIONS: Record<string, string> = {
+        'jg': 'jogo',
+        'cx': 'caixa',
+        'pcs': 'pecas',
+        'un': 'unidade',
+        'unid': 'unidade',
+        'conj': 'conjunto',
+        'c': 'com',
+        'p': 'para',
+        'qte': 'quantidade',
+        'qt': 'quantidade',
+        'gde': 'grande',
+        'peq': 'pequeno',
+        'med': 'medio',
+        'inox': 'inox',
+    };
+
     private normalizeText(text: string): string {
         return (text || '')
             .toLowerCase()
@@ -20,6 +38,25 @@ export class ImageMatchService {
             .trim();
     }
 
+    /**
+     * Normalização leve de plural PT-BR: remove -s, -es, -ões finais comuns
+     */
+    private stemToken(token: string): string {
+        if (token.length <= 3) return token;
+        if (token.endsWith('oes')) return token.slice(0, -3) + 'ao';
+        if (token.endsWith('es') && token.length > 4) return token.slice(0, -2);
+        if (token.endsWith('s')) return token.slice(0, -1);
+        return token;
+    }
+
+    /**
+     * Expande abreviações e aplica stemming nos tokens
+     */
+    private expandToken(token: string): string {
+        const expanded = ImageMatchService.ABBREVIATIONS[token];
+        return expanded || token;
+    }
+
     private getTokens(text: string): string[] {
         const stopWords = new Set(['de', 'para', 'com', 'sem', 'em', 'um', 'uma', 'os', 'as', 'do', 'da', 'dos', 'das', 'no', 'na', 'nos', 'nas', 'por', 'ao', 'aos', 'ou', 'e', 'x', 'a', 'o', 'le', 'la', 'les', 'des', 'du', 'au', 'aux']);
         const units = /^\d+(ml|l|kg|g|cm|mm|pcs|un|unid|pecas|jog|jogo|kit|conjunto)$/i;
@@ -27,6 +64,13 @@ export class ImageMatchService {
         return this.normalizeText(text)
             .split(' ')
             .filter(w => w.length >= 2 && !stopWords.has(w) && !units.test(w));
+    }
+
+    /**
+     * Retorna tokens normalizados (expandidos + stemmed) para comparação
+     */
+    private getNormalizedTokens(text: string): string[] {
+        return this.getTokens(text).map(t => this.stemToken(this.expandToken(t)));
     }
 
     private extractSpecs(text: string) {
@@ -41,7 +85,7 @@ export class ImageMatchService {
             volume: volumeMatch ? volumeMatch[1].replace(',', '.') + (volumeMatch[2].toLowerCase().startsWith('l') ? 'l' : 'ml') : null,
             quantity: qtyMatch ? qtyMatch[1] : null,
             dimension: dimMatch ? dimMatch[1].replace(',', '.') + dimMatch[2].toLowerCase() : null,
-            isKit: /kit|conjunto|jogo/i.test(normalized)
+            isKit: /kit|conjunto|jogo|jg\b/i.test(normalized)
         };
     }
 
@@ -78,16 +122,31 @@ export class ImageMatchService {
         let candidates = candidatesList;
 
         if (!candidates) {
-            // Se não achou por EAN, busca candidatos por palavra-chave para análise radical
-            const searchTokens = this.getTokens(product.name);
-            const primaryWord = searchTokens[0] || '';
+            // Busca candidatos usando múltiplos tokens (não apenas o primeiro)
+            // Filtra tokens genéricos/curtos e pega os mais descritivos
+            const searchTokens = this.getTokens(product.name)
+                .filter(t => t.length >= 3 && !ImageMatchService.ABBREVIATIONS[t]);
 
-            const { data } = await supabaseAdmin
-                .from('catalog_images_bank')
-                .select('*')
-                .ilike('name', `%${primaryWord}%`)
-                .limit(200);
-            candidates = data || [];
+            // Busca por cada token significativo e une os resultados (sem duplicatas)
+            const candidateMap = new Map<string, any>();
+            const tokensToSearch = searchTokens.slice(0, 4); // Top 4 tokens descritivos
+
+            for (const token of tokensToSearch) {
+                const { data } = await supabaseAdmin
+                    .from('catalog_images_bank')
+                    .select('*')
+                    .ilike('name', `%${token}%`)
+                    .limit(200);
+
+                if (data) {
+                    for (const item of data) {
+                        if (!candidateMap.has(item.id)) {
+                            candidateMap.set(item.id, item);
+                        }
+                    }
+                }
+            }
+            candidates = Array.from(candidateMap.values());
         }
 
         if (!candidates || candidates.length === 0) return null;
@@ -96,6 +155,7 @@ export class ImageMatchService {
         let highestScore = 0;
 
         const productTokens = this.getTokens(product.name);
+        const productNormTokens = this.getNormalizedTokens(product.name);
         if (productTokens.length === 0) return null;
 
         for (const cand of candidates) {
@@ -127,19 +187,22 @@ export class ImageMatchService {
             }
 
             const candTokens = this.getTokens(cand.name);
+            const candNormTokens = this.getNormalizedTokens(cand.name);
             if (candTokens.length === 0) continue;
 
-            // Pontuação por Tokens
+            // Pontuação por Tokens (com expansão de abreviações e stemming)
             let matchedTokens = 0;
-            productTokens.forEach(pt => {
-                if (candTokens.includes(pt) || cand.name.toLowerCase().includes(pt)) {
+            productNormTokens.forEach((pt, idx) => {
+                const rawPt = productTokens[idx];
+                if (candNormTokens.includes(pt) || candTokens.includes(rawPt) || cand.name.toLowerCase().includes(rawPt)) {
                     matchedTokens++;
                 }
             });
 
             let candMatched = 0;
-            candTokens.forEach(ct => {
-                if (productTokens.includes(ct) || product.name.toLowerCase().includes(ct)) {
+            candNormTokens.forEach((ct, idx) => {
+                const rawCt = candTokens[idx];
+                if (productNormTokens.includes(ct) || productTokens.includes(rawCt) || product.name.toLowerCase().includes(rawCt)) {
                     candMatched++;
                 }
             });

@@ -6,6 +6,10 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  serverExternalPackages: ['mupdf'],
+  experimental: {
+    proxyClientMaxBodySize: '50mb',
+  },
 }
 
 export default nextConfig
